@@ -1,0 +1,11 @@
+version: "2"
+
+services:
+  bot:
+    image: lucawen/sheepbot
+    depends_on:
+        - lavalink
+  lavalink:
+    image: fredboat/lavalink:master
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml
