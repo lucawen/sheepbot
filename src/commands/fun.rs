@@ -37,3 +37,20 @@ pub(self) async fn rojao(ctx: &Context, msg: &Message) -> CommandResult {
     check_msg(msg.channel_id.say(&ctx.http, "POOOOOWW").await);
     Ok(())
 }
+
+#[command]
+pub(self) async fn huehue(ctx: &Context, msg: &Message) -> CommandResult {
+    let avaiable_gifs = [
+        "https://tenor.com/bn4pN.gif",
+        "https://tenor.com/bmfGc.gif",
+        "https://tenor.com/QITm.gif",
+        "https://tenor.com/05He.gif",
+        "https://tenor.com/8VkU.gif",
+    ];
+    let choose = avaiable_gifs[rand::thread_rng().gen_range(0, avaiable_gifs.len())];
+    let _ = msg.channel_id.send_message(&ctx.http, |m| {
+        m.content(choose);
+        m
+    }).await;
+    Ok(())
+}

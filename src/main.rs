@@ -49,6 +49,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Expected the lavalink url in the environment");
     let lavalink_password = env::var("LAVALINK_PASSWORD")
         .expect("Expected the lavalink password in the environment");
+    
+    let prefix = env::var("BOT_PREFIX").ok();
+    let prefix = prefix
+        .as_ref()
+        .map(String::as_str)        
+        .and_then(|s| if s.is_empty() { None } else { Some(s) })
+        .unwrap_or("~");
 
     let http = Http::new_with_token(&token);
 
@@ -60,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let framework = StandardFramework::new()
         .configure(|c| c
-                   .prefix("~"))
+                   .prefix(prefix))
         .group(&MUSIC_GROUP)
         .group(&FUN_GROUP);
 
