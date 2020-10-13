@@ -141,12 +141,25 @@ pub(self) async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResu
 
         drop(lava_client);
 
-        if let Err(why) = LavalinkClient::play(guild_id, query_information.tracks[0].clone()).queue(Arc::clone(lava_client_lock)).await {
-            eprintln!("{}", why);
-            return Ok(());
-        };
-        check_msg(msg.channel_id.say(&ctx.http, format!("Added to queue: {}", query_information.tracks[0].info.as_ref().unwrap().title)).await);
+        if query_information.load_type == "PLAYLIST_LOADED" {
+            let total_songs = query_information.tracks.len();
+            if let Some(playlist_name) = query_information.playlist_info.name {
+                check_msg(msg.channel_id.say(&ctx.http, format!("Playlist {} identified with {} songs", playlist_name, total_songs)).await);
+            }
+            for track in query_information.tracks.iter() {
+                if let Err(why) = LavalinkClient::play(guild_id, track.clone()).queue(Arc::clone(lava_client_lock)).await {
+                    eprintln!("{}", why);
+                };
+            }
+            check_msg(msg.channel_id.say(&ctx.http, format!("Playing the playlist with first song: {}", query_information.tracks[0].info.as_ref().unwrap().title)).await);
 
+        } else {
+            if let Err(why) = LavalinkClient::play(guild_id, query_information.tracks[0].clone()).queue(Arc::clone(lava_client_lock)).await {
+                eprintln!("{}", why);
+                return Ok(());
+            };
+            check_msg(msg.channel_id.say(&ctx.http, format!("Added to queue: {}", query_information.tracks[0].info.as_ref().unwrap().title)).await);
+        }
     } else {
         check_msg(msg.channel_id.say(&ctx.http, "Use `~join` first, to connect the bot to your current voice channel.").await);
     }
@@ -156,14 +169,17 @@ pub(self) async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResu
 
 #[command]
 #[aliases(np)]
-pub(self) async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
+pub(self) async fn now(ctx: &Context, msg: &Message) -> CommandResult {
     let mut data = ctx.data.write().await;
     let lava_client_lock = data.get_mut::<Lavalink>().expect("Expected a lavalink client in TypeMap");
     let lava_client = lava_client_lock.lock().await;
 
     if let Some(node) = lava_client.nodes.get(&msg.guild_id.unwrap().0) {
         if let Some(track) = &node.now_playing {
-            check_msg(msg.channel_id.say(&ctx.http, format!("Now Playing: {}", track.track.info.as_ref().unwrap().title)).await);
+            let len_queue = node.queue.len();
+            if let Some(track_info) = &track.track.info {
+                check_msg(msg.channel_id.say(&ctx.http, format!("Now Playing: ({}) {}", len_queue, track_info.title)).await);
+            }
         } else {
             check_msg(msg.channel_id.say(&ctx.http, "Nothing is playing at the moment.").await);
         }
@@ -178,9 +194,19 @@ pub(self) async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 pub(self) async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     let mut data = ctx.data.write().await;
     let lava_client_lock = data.get_mut::<Lavalink>().expect("Expected a lavalink client in TypeMap");
+    let mut lava_client = lava_client_lock.lock().await;
 
-    if let Some(track) = lava_client_lock.lock().await.skip(msg.guild_id.unwrap()).await {
-        check_msg(msg.channel_id.say(ctx, format!("Skipped: {}", track.track.info.as_ref().unwrap().title)).await);
+    if let Some(track) = lava_client.skip(msg.guild_id.unwrap()).await {
+        if let Some(node) = lava_client.nodes.get(&msg.guild_id.unwrap().0) {
+            let len_queue = node.queue.len();
+            if let Some(track_info) = track.track.info {
+                check_msg(msg.channel_id.say(ctx, format!("Skipped: {}. {} songs left", track_info.title, len_queue)).await);
+            } else {
+                check_msg(msg.channel_id.say(ctx, format!("Skipped. {} songs left", len_queue)).await);
+            }
+        } else {
+            check_msg(msg.channel_id.say(&ctx.http, "Nothing is playing at the moment.").await);
+        }
     } else {
         check_msg(msg.channel_id.say(ctx, "Nothing to skip.").await);
     }

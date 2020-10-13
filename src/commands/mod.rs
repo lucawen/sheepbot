@@ -15,10 +15,10 @@ use fun::*;
 
 #[group]
 #[description = "Music commands"]
-#[commands(join, leave, ping, play, now_playing, skip)]
+#[commands(join, leave, ping, play, now, skip)]
 pub(crate) struct Music;
 
 #[group]
 #[description = "Fun commands"]
-#[commands(rojao, huehue)]
+#[commands(rojao, huehue, qrcode)]
 pub(crate) struct Fun;

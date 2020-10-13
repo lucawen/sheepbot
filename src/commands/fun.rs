@@ -1,21 +1,25 @@
-use std::{time};
-
 use tokio::time::{delay_for, Duration};
+use std::{path::Path, fs::remove_file};
 
 use serenity::{client::Context};
 
 use serenity::{
     framework::{
         standard::{
-            CommandResult,
+            Args, CommandResult,
             macros::{command},
         },
     },
-    model::{channel::Message}
+    model::{channel::Message},
+    http::AttachmentType
 };
 use crate::utils::message::{check_msg};
 
-use rand::Rng;
+use rand::Rng; 
+use rand::distributions::Alphanumeric;
+use qrcode::QrCode;
+use image::Luma;
+
 
 #[command]
 pub(self) async fn rojao(ctx: &Context, msg: &Message) -> CommandResult {
@@ -52,5 +56,32 @@ pub(self) async fn huehue(ctx: &Context, msg: &Message) -> CommandResult {
         m.content(choose);
         m
     }).await;
+    Ok(())
+}
+
+#[command]
+#[min_args(1)]
+pub(self) async fn qrcode(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let msg_received = args.message().to_string();
+
+    let code = QrCode::new(msg_received).unwrap();
+    let image = code.render::<Luma<u8>>().build();
+
+    // Save the image.
+    let random_fname = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(10)
+        .collect::<String>();
+    let filepath = format!("/tmp/{}.png", random_fname);
+    image.save(&filepath).unwrap();
+
+    let _ = msg.channel_id.send_message(&ctx.http, |m| {
+        m.add_file(AttachmentType::Path(Path::new(&filepath)));
+        m
+    }).await;
+
+    remove_file(&filepath)
+        .expect("Cant remove qrcode file");
+
     Ok(())
 }
