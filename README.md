@@ -4,8 +4,11 @@ A discord server bot written in rust with fun commands and music streaming
 
 
 ### Using
-Add a .env file with environments. See .env.example for what you need to put.
-Or just add the env into docker environment.
+Check the config/example.toml to see what you can add as config.
+
+You can add a 'local.toml' file for you development variables. (Its ignored by .gitignore)\
+
+For docker environment, just check the env_example to see how to use the env as config
 
 For development, just execute:
 
