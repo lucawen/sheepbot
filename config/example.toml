@@ -1,0 +1,7 @@
+[discord]
+prefix = "?"
+token = "DISCORD_TOKEN"
+
+[lavalink]
+url = "127.0.0.1"
+password = "LAVALINK_PASSWORD"

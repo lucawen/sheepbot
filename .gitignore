@@ -20,3 +20,5 @@ Cargo.lock
 
 ### EXTRA ###
 .env
+
+config/local.toml

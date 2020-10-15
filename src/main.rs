@@ -1,11 +1,16 @@
+extern crate config;
+extern crate serde;
+
+#[macro_use]
+extern crate serde_derive;
+
+
 mod commands;
 mod utils;
 mod handler;
-
-use dotenv::dotenv;
+mod settings;
 
 use std::{
-    env,
     sync::Arc,
     collections::HashSet,
     time::Duration,
@@ -37,25 +42,20 @@ use crate::handler::{
     LavalinkHandler
 };
 
+use settings::Settings;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
+    let settings =  match Settings::new() {
+        Ok(conf) => conf,
+        Err(why) => panic!("Could not read config: {:?}", why),
+    };
 
-    // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN")
-        .expect("Expected a token in the environment");
-    let lavalink_url = env::var("LAVALINK_URL")
-        .expect("Expected the lavalink url in the environment");
-    let lavalink_password = env::var("LAVALINK_PASSWORD")
-        .expect("Expected the lavalink password in the environment");
+    let token = settings.discord.token;
+    let lavalink_url = settings.lavalink.url;
+    let lavalink_password = settings.lavalink.password;
     
-    let prefix = env::var("BOT_PREFIX").ok();
-    let prefix = prefix
-        .as_ref()
-        .map(String::as_str)        
-        .and_then(|s| if s.is_empty() { None } else { Some(s) })
-        .unwrap_or("~");
+    let prefix = settings.discord.prefix.as_str();
 
     let http = Http::new_with_token(&token);
 
