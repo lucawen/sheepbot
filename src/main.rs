@@ -21,9 +21,13 @@ use serenity::{
     client::{
         Client,
     },
-    framework::{
-        StandardFramework,
+    framework::standard::{
+        Args, StandardFramework, CommandGroup,
+        HelpOptions, help_commands, CommandResult,
+        macros::{help},
     },
+    model::prelude::*,
+    prelude::*,
 };
 
 use serenity::prelude::*;
@@ -43,6 +47,20 @@ use crate::handler::{
 };
 
 use settings::Settings;
+
+
+#[help]
+async fn my_help(
+    context: &Context,
+    msg: &Message,
+    args: Args,
+    help_options: &'static HelpOptions,
+    groups: &[&'static CommandGroup],
+    owners: HashSet<UserId>
+) -> CommandResult {
+    let _ = help_commands::with_embeds(context, msg, args, &help_options, groups, owners).await;
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -68,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let framework = StandardFramework::new()
         .configure(|c| c
                    .prefix(prefix))
+        .help(&MY_HELP)
         .group(&MUSIC_GROUP)
         .group(&FUN_GROUP);
 
