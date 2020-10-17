@@ -142,7 +142,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .help(&MY_HELP)
         .after(after)
         .group(&MUSIC_GROUP)
-        .group(&FUN_GROUP);
+        .group(&FUN_GROUP)
+        .group(&CONFIG_GROUP);
 
     let mut client = Client::new(token)
         .framework(framework)

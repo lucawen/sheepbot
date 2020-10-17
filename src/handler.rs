@@ -107,6 +107,10 @@ impl EventHandler for Handler {
         initialize_tables(&ctx, &guild).await;
     }
 
+    async fn message(&self, ctx: Context, msg: Message) {
+
+    }
+
 }
 
 pub(crate) struct LavalinkHandler;
