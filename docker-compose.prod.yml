@@ -9,3 +9,6 @@ services:
     image: fredboat/lavalink:master
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml
+  db:
+    image: postgres:12
+    restart: always

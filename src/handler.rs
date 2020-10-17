@@ -1,3 +1,5 @@
+use tracing::{error, info};
+
 use std::{
     sync::Arc,
     collections::HashSet,
@@ -28,6 +30,7 @@ use serenity::{
         gateway::Ready,
         id::GuildId,
         event::VoiceServerUpdateEvent,
+        prelude::{Guild},
     },
 };
 
@@ -37,6 +40,10 @@ use lavalink_rs::{
     model::*,
     gateway::*,
 };
+use sqlx::PgPool;
+use crate::settings::Settings;
+
+use crate::utils::database::{initialize_tables};
 
 
 pub(crate) struct VoiceManager;
@@ -55,6 +62,17 @@ impl TypeMapKey for VoiceGuildUpdate {
     type Value = Arc<RwLock<HashSet<GuildId>>>;
 }
 
+pub(crate) struct ConnectionPool;
+
+impl TypeMapKey for ConnectionPool {
+    type Value = PgPool;
+}
+
+pub(crate) struct SettingsConf;
+
+impl TypeMapKey for SettingsConf {
+    type Value = Settings;
+}
 
 pub(crate) struct Handler;
 
@@ -62,7 +80,7 @@ pub(crate) struct Handler;
 impl EventHandler for Handler {
     async fn ready(&self, _: Context, ready: Ready) {
         if let Some(shard) = ready.shard {
-            println!(
+            info!(
                 "{} is connected on shard {}/{}!",
                 ready.user.name,
                 shard[0],
@@ -80,6 +98,15 @@ impl EventHandler for Handler {
         }
     }
 
+    async fn guild_create(&self, ctx: Context, guild: Guild, is_new: bool) {
+        // We'll initialize the database tables for a guild if it's new.
+        if !is_new {
+            return;
+        }
+
+        initialize_tables(&ctx, &guild).await;
+    }
+
 }
 
 pub(crate) struct LavalinkHandler;
@@ -87,18 +114,25 @@ pub(crate) struct LavalinkHandler;
 #[async_trait]
 impl LavalinkEventHandler for LavalinkHandler {
     async fn track_start(&self, _client: Arc<Mutex<LavalinkClient>>, event: TrackStart) {
-        println!("Track started!\nGuild: {}", event.guild_id);
+        info!("Track started!\nGuild: {}", event.guild_id);
     }
     async fn track_finish(&self, _client: Arc<Mutex<LavalinkClient>>, event: TrackFinish) {
-        println!("Track finished!\nGuild: {}", event.guild_id);
+        info!("Track finished!\nGuild: {}", event.guild_id);
     }
 }
 
 #[hook]
-async fn after(_ctx: &Context, _msg: &Message, command_name: &str, command_result: CommandResult) {
-    match command_result {
-        Err(why) => println!("Command '{}' returned error {:?} => {}", command_name, why, why),
-        _ => (),
+pub(crate) async fn after(ctx: &Context, msg: &Message, cmd_name: &str, error: CommandResult) {
+    if let Err(why) = &error {
+        error!("Error while running command {}", &cmd_name);
+        error!("{:?}", &error);
+
+        let err = why.to_string();
+        if msg.channel_id.say(ctx, &err).await.is_err() {
+            error!(
+                "Unable to send messages on channel id {}",
+                &msg.channel_id.0
+            );
+        };
     }
 }
-
