@@ -31,6 +31,11 @@ use lavalink_rs::{
     LavalinkClient
 };
 
+use tracing_subscriber::{
+    FmtSubscriber,
+    EnvFilter,
+};
+
 
 use crate::commands::*;
 
@@ -50,6 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(conf) => conf,
         Err(why) => panic!("Could not read config: {:?}", why),
     };
+
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
     let token = settings.discord.token;
     let lavalink_url = settings.lavalink.url;
@@ -71,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .group(&MUSIC_GROUP)
         .group(&FUN_GROUP);
 
-    let mut client = Client::new(&token)
+    let mut client = Client::builder(&token)
         .event_handler(Handler)
         .framework(framework)
         .await
