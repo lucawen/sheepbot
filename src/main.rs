@@ -155,12 +155,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .group(&FUN_GROUP)
         .group(&CONFIG_GROUP);
 
-<<<<<<< HEAD
-    let mut client = Client::new(token)
-=======
-    let mut client = Client::builder(&token)
+    let mut client = Client::builder(token)
         .event_handler(Handler)
->>>>>>> master
         .framework(framework)
         .event_handler(Handler)
         .await
