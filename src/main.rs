@@ -9,6 +9,7 @@ mod commands;
 mod utils;
 mod handler;
 mod settings;
+mod models;
 
 use tracing::{error, info};
 

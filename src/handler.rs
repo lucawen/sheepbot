@@ -44,6 +44,7 @@ use sqlx::PgPool;
 use crate::settings::Settings;
 
 use crate::utils::database::{initialize_tables};
+use crate::dynamic_prefix;
 
 
 pub(crate) struct VoiceManager;
@@ -109,6 +110,20 @@ impl EventHandler for Handler {
 
     async fn message(&self, ctx: Context, msg: Message) {
 
+        let data_read = ctx.data.read().await;
+        let settings = data_read.get::<SettingsConf>().unwrap();
+
+        // get prefix for the guild.
+        let prefix = match dynamic_prefix(&ctx, &msg).await {
+            Some(p) => p,
+            None => String::from(&settings.discord.prefix),
+        };
+        if !!!msg.content.starts_with(&prefix) {
+            let pool = data_read.get::<ConnectionPool>().unwrap();
+            // if msg.content == format!("") {
+
+            // }
+        }
     }
 
 }

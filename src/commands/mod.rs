@@ -27,5 +27,5 @@ pub(crate) struct Fun;
 
 #[group]
 #[description = "Config commands"]
-#[commands(set_channel_only_link)]
+#[commands(set_channel_only_link, unset_channel_only_link)]
 pub(crate) struct Config;
