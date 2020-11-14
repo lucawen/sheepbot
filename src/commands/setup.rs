@@ -42,9 +42,7 @@ pub async fn set_channel_only_link(ctx: &Context, msg: &Message, args: Args) -> 
         };
 
         let domain = match domain_str {
-            // The division was valid
             Some(x) => x.replace("www.", ""),
-            // The division was invalid
             None    => {
                 check_msg(msg.reply(ctx, "Cant parse this url").await);
                 return Ok(())
