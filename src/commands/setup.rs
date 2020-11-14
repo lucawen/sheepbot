@@ -53,14 +53,16 @@ pub async fn set_channel_only_link(ctx: &Context, msg: &Message, args: Args) -> 
         let pool = data_read.get::<ConnectionPool>().unwrap();
         
 
-        if let Ok(_) = sqlx::query!(
+        if let Ok(_) = sqlx::query(
             "SELECT channel_id FROM only_link_channel
             WHERE guild_id = $1
             AND channel_id = $2
             AND url = $3
-            LIMIT 1",
-            guild_id, channel_id, domain
+            LIMIT 1"
         )
+        .bind(guild_id)
+        .bind(channel_id)
+        .bind(&domain)
         .fetch_one(pool)
         .await
         {
@@ -69,16 +71,19 @@ pub async fn set_channel_only_link(ctx: &Context, msg: &Message, args: Args) -> 
                 m
             }).await;
         } else {
-            if let Err(why) = sqlx::query!(
-                r#"
+            if let Err(why) = sqlx::query(
+                "
                 INSERT INTO only_link_channel (
                     guild_id, channel_id, user_id, url
                 ) VALUES (
                     $1, $2, $3, $4
                 );
-                "#,
-                guild_id as i64, channel_id, user_id, domain
+                ",
             )
+            .bind(guild_id as i64)
+            .bind(channel_id)
+            .bind(user_id)
+            .bind(&domain)
             .execute(pool)
             .await
             {
@@ -102,7 +107,7 @@ pub async fn set_channel_only_link(ctx: &Context, msg: &Message, args: Args) -> 
 
 #[command]
 #[aliases(unset_col)]
-pub async fn unset_channel_only_link(ctx: &Context, msg: &Message) -> CommandResult {
+pub async fn unset_channel_only_link(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     if let Some(guild) = msg.guild(&ctx.cache).await {
         let guild_id: i64 = i64::from(guild.id);
@@ -110,22 +115,28 @@ pub async fn unset_channel_only_link(ctx: &Context, msg: &Message) -> CommandRes
         
         let data_read = ctx.data.read().await;
         let pool = data_read.get::<ConnectionPool>().unwrap();
+        let msg_received = args.message();
 
-        if let Ok(_) = sqlx::query!(
-            "SELECT channel_id FROM only_link_channel WHERE guild_id = $1 and channel_id = $2 LIMIT 1",
-            guild_id, channel_id
+        if let Ok(_) = sqlx::query(
+            "SELECT channel_id FROM only_link_channel WHERE guild_id = $1 and channel_id = $2 AND url = $3 LIMIT 1"
         )
+        .bind(guild_id)
+        .bind(channel_id)
+        .bind(msg_received)
         .fetch_one(pool)
         .await
         {
-            if let Err(why) = sqlx::query!(
-                r#"
+            if let Err(why) = sqlx::query(
+                "
                 DELETE FROM only_link_channel
                 WHERE guild_id = $1
                 AND channel_id = $2
-                "#,
-                guild_id as i64, channel_id
+                AND url = $3
+                "
             )
+            .bind(guild_id as i64)
+            .bind(channel_id)
+            .bind(msg_received)
             .execute(pool)
             .await
             {
@@ -142,7 +153,7 @@ pub async fn unset_channel_only_link(ctx: &Context, msg: &Message) -> CommandRes
             }
         } else {
             let _ = msg.channel_id.send_message(&ctx.http, |m| {
-                m.content("Only Link Mode is not set to this channel");
+                m.content("This url is not set as Only Link Mode");
                 m
             }).await;
         }

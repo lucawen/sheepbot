@@ -1,6 +1,6 @@
 use tracing::{error};
 
-use crate::handler::{ConnectionPool};
+use crate::handler::{ConnectionPool, SettingsConf};
 
 use serenity::{model::prelude::Guild, prelude::Context};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -19,16 +19,16 @@ pub async fn initialize_tables(ctx: &Context, guild: &Guild) {
     let pool = data_read.get::<ConnectionPool>().unwrap();
 
     // config table initialization
-    if let Err(why) = sqlx::query!(
-        r#"
+    if let Err(why) = sqlx::query(
+        "
         INSERT INTO config (
             guild_id
         ) VALUES (
             $1
         ) ON CONFLICT (guild_id) DO NOTHING;
-        "#,
-        guild.id.0 as i64
+        "
     )
+    .bind(guild.id.0 as i64)
     .execute(pool)
     .await
     {
@@ -38,17 +38,21 @@ pub async fn initialize_tables(ctx: &Context, guild: &Guild) {
         );
     }
 
+    let settings = data_read.get::<SettingsConf>().unwrap();
+    let default_prefix = settings.discord.prefix.as_str();
+
     // prefixes table initialization
-    if let Err(why) = sqlx::query!(
+    if let Err(why) = sqlx::query(
         "
         INSERT INTO prefixes (
             guild_id, prefix
         ) VALUES (
             $1, $2
         ) ON CONFLICT (guild_id) DO NOTHING;
-        ",
-        guild.id.0 as i64, "OK"
+        "
     )
+    .bind(guild.id.0 as i64)
+    .bind(default_prefix)
     .execute(pool)
     .await
     {

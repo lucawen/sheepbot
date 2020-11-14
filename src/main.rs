@@ -11,6 +11,7 @@ mod handler;
 mod settings;
 mod models;
 
+use sqlx::{Row, postgres::PgRow};
 use tracing::{error, info};
 
 use std::{
@@ -41,6 +42,7 @@ use tracing_subscriber::{
     FmtSubscriber,
     EnvFilter,
 };
+use futures::TryStreamExt;
 
 
 use crate::commands::*;
@@ -53,7 +55,8 @@ use crate::handler::{
     LavalinkHandler,
     ConnectionPool,
     after,
-    SettingsConf
+    SettingsConf,
+    normal_message
 };
 
 use settings::Settings;
@@ -87,19 +90,15 @@ pub async fn dynamic_prefix(ctx: &Context, msg: &Message) -> Option<String> {
     if let Some(id) = guild_id {
         let pool = data.get::<ConnectionPool>().unwrap();
 
-        let res = sqlx::query!(
+        let res = sqlx::query(
             "SELECT prefix FROM prefixes WHERE guild_id = $1",
-            id.0 as i64
         )
+        .bind(id.0 as i64)
         .fetch_one(pool)
         .await;
 
         prefix = if let Ok(data) = res {
-            if let Some(p) = data.prefix {
-                p
-            } else {
-                default_prefix.to_string()
-            }
+            data.try_get("prefix").unwrap_or(default_prefix.to_string())
         } else {
             error!("I couldn't query the database for getting guild prefix.");
             default_prefix.to_string()
@@ -150,6 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .on_mention(Some(bot_id))
         })
         .help(&MY_HELP)
+        .normal_message(normal_message)
         .after(after)
         .group(&MUSIC_GROUP)
         .group(&FUN_GROUP)

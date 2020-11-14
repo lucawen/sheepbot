@@ -161,7 +161,7 @@ pub(self) async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResu
             check_msg(msg.channel_id.say(&ctx.http, format!("Added to queue: {}", query_information.tracks[0].info.as_ref().unwrap().title)).await);
         }
     } else {
-        check_msg(msg.channel_id.say(&ctx.http, "Use `~join` first, to connect the bot to your current voice channel.").await);
+        check_msg(msg.channel_id.say(&ctx.http, "Use `join` first, to connect the bot to your current voice channel.").await);
     }
 
     Ok(())

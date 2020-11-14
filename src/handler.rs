@@ -108,41 +108,40 @@ impl EventHandler for Handler {
 
         initialize_tables(&ctx, &guild).await;
     }
+}
 
-    async fn message(&self, ctx: Context, msg: Message) {
+#[hook]
+pub async fn normal_message(ctx: &Context, msg: &Message) {
+    let data_read = ctx.data.read().await;
+    let settings = data_read.get::<SettingsConf>().unwrap();
 
-        let data_read = ctx.data.read().await;
-        let settings = data_read.get::<SettingsConf>().unwrap();
+    // get prefix for the guild.
+    let prefix = match dynamic_prefix(&ctx, &msg).await {
+        Some(p) => p,
+        None => String::from(&settings.discord.prefix),
+    };
+    if !!!msg.content.starts_with(&prefix) && !!!msg.author.bot {
+        let pool = data_read.get::<ConnectionPool>().unwrap();
+        if let Some(guild_id) = msg.guild_id {
+            let rules = get_link_only_modes(
+                pool, guild_id, msg.channel_id).await;
+            match rules {
+                Ok(res) => {
+                    let string_rules = res.iter().map(|x| x.url.clone()).collect::<Vec<_>>();
 
-        // get prefix for the guild.
-        let prefix = match dynamic_prefix(&ctx, &msg).await {
-            Some(p) => p,
-            None => String::from(&settings.discord.prefix),
-        };
-        if !!!msg.content.starts_with(&prefix) && !!!msg.author.bot {
-            let pool = data_read.get::<ConnectionPool>().unwrap();
-            if let Some(guild_id) = msg.guild_id {
-                let rules = get_link_only_modes(
-                    pool, guild_id, msg.channel_id).await;
-                match rules {
-                    Ok(res) => {
-                        let string_rules = res.iter().map(|x| x.url.clone()).collect::<Vec<_>>();
-    
-                        if !!!string_rules.iter().any(|i| msg.content.contains(i)) {
-                            msg.delete(ctx.http).await.unwrap();
-                        }
-                    },
-                    Err(err) => {
-                        println!(
-                            "Error when trying to get links only: {:?}",
-                            err,
-                        );
-                    },
-                }
+                    if !!!string_rules.iter().any(|i| msg.content.contains(i)) && !!!res.is_empty() {
+                        msg.delete(&ctx.http).await.unwrap();
+                    }
+                },
+                Err(err) => {
+                    println!(
+                        "Error when trying to get links only: {:?}",
+                        err,
+                    );
+                },
             }
         }
     }
-
 }
 
 pub(crate) struct LavalinkHandler;
