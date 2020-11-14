@@ -16,6 +16,7 @@ pub struct Lavalink {
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
+    pub database_url: String,
     pub discord: Discord,
     pub lavalink: Lavalink,
 }

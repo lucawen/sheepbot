@@ -1,6 +1,7 @@
 
 mod music;
 mod fun;
+mod setup;
 
 use serenity::{
     framework::{
@@ -12,6 +13,7 @@ use serenity::{
 
 use music::*;
 use fun::*;
+use setup::*;
 
 #[group]
 #[description = "Music commands"]
@@ -22,3 +24,8 @@ pub(crate) struct Music;
 #[description = "Fun commands"]
 #[commands(rojao, huehue, qrcode)]
 pub(crate) struct Fun;
+
+#[group]
+#[description = "Config commands"]
+#[commands(set_channel_only_link, unset_channel_only_link, list_channel_only_link)]
+pub(crate) struct Config;

@@ -18,3 +18,11 @@ services:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml
     ports:
       - 2333:2333
+  db:
+    image: postgres:12
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: passworddevelop
+      POSTGRES_DB: sheepbot
+    ports:
+      - 5432:5432
