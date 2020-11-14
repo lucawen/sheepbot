@@ -87,25 +87,28 @@ pub async fn dynamic_prefix(ctx: &Context, msg: &Message) -> Option<String> {
     let default_prefix = settings.discord.prefix.as_str();
 
     let prefix: String;
-    if let Some(id) = guild_id {
-        let pool = data.get::<ConnectionPool>().unwrap();
+    // TODO: Fix prefix from database
+    // if let Some(id) = guild_id {
+    //     let pool = data.get::<ConnectionPool>().unwrap();
 
-        let res = sqlx::query(
-            "SELECT prefix FROM prefixes WHERE guild_id = $1",
-        )
-        .bind(id.0 as i64)
-        .fetch_one(pool)
-        .await;
+    //     let res = sqlx::query(
+    //         "SELECT prefix FROM prefixes WHERE guild_id = $1",
+    //     )
+    //     .bind(id.0 as i64)
+    //     .fetch_one(pool)
+    //     .await;
 
-        prefix = if let Ok(data) = res {
-            data.try_get("prefix").unwrap_or(default_prefix.to_string())
-        } else {
-            error!("I couldn't query the database for getting guild prefix.");
-            default_prefix.to_string()
-        }
-    } else {
-        prefix = default_prefix.to_string();
-    };
+    //     prefix = if let Ok(data) = res {
+    //         data.try_get("prefix").unwrap_or(default_prefix.to_string())
+    //     } else {
+    //         error!("I couldn't query the database for getting guild prefix.");
+    //         default_prefix.to_string()
+    //     }
+    // } else {
+    //     prefix = default_prefix.to_string();
+    // };
+
+    prefix = default_prefix.to_string();
 
     Some(prefix)
 }
