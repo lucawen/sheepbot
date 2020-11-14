@@ -1,8 +1,8 @@
-
+#[derive(sqlx::FromRow)]
 pub struct OnlyLinkChannel {
-    guild_id: i64,
-    id: i32,
-    channel_id:i64,
-    user_id:i64,
-    url: String
+    pub guild_id: i64,
+    pub id: i32,
+    pub channel_id: i64,
+    pub user_id: i64,
+    pub url: String
 }

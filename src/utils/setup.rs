@@ -1,26 +1,20 @@
 use sqlx::{Pool, Postgres};
+use anyhow::Result;
 
 use crate::models::{OnlyLinkChannel};
-use std::collections::HashMap;
+use serenity::model::id::{GuildId, ChannelId};
 
-
-pub async fn get_link_only_modes(pool: &Pool<Postgres>, guild_id: i64, channel_id: i64) -> Result<()> {
-    let mut rows = sqlx::query(
+pub async fn get_link_only_modes(pool: &Pool<Postgres>, guild_id: GuildId, channel_id: ChannelId) -> Result<Vec<OnlyLinkChannel>> {
+    let rows = sqlx::query_as::<_, OnlyLinkChannel>(
         "SELECT * FROM only_link_channel
-            WHERE guild_id = ?
-            AND channel_id = ?
+            WHERE guild_id = $1
+            AND channel_id = $2
             "
         )
-        .bind(guild_id)
-        .bind(channel_id)
-        .fetch(pool)
+        .bind(i64::from(guild_id))
+        .bind(i64::from(channel_id))
+        .fetch_all(pool)
+        .await?;
 
-    let mut book_reviews: HashMap<i64, OnlyLinkChannel> = HashMap::new();
-
-    while let Some(row) = rows.try_next().await? {
-        // map the row into a user-defined domain type
-        let email: &str = row.try_get("email")?;
-    }
-
-    Ok(())
+    Ok(rows)
 }

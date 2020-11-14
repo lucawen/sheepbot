@@ -46,6 +46,7 @@ use crate::settings::Settings;
 use crate::utils::database::{initialize_tables};
 use crate::dynamic_prefix;
 
+use crate::utils::setup::{get_link_only_modes};
 
 pub(crate) struct VoiceManager;
 pub(crate) struct Lavalink;
@@ -118,11 +119,27 @@ impl EventHandler for Handler {
             Some(p) => p,
             None => String::from(&settings.discord.prefix),
         };
-        if !!!msg.content.starts_with(&prefix) {
+        if !!!msg.content.starts_with(&prefix) && !!!msg.author.bot {
             let pool = data_read.get::<ConnectionPool>().unwrap();
-            // if msg.content == format!("") {
-
-            // }
+            if let Some(guild_id) = msg.guild_id {
+                let rules = get_link_only_modes(
+                    pool, guild_id, msg.channel_id).await;
+                match rules {
+                    Ok(res) => {
+                        let string_rules = res.iter().map(|x| x.url.clone()).collect::<Vec<_>>();
+    
+                        if !!!string_rules.iter().any(|i| msg.content.contains(i)) {
+                            msg.delete(ctx.http).await.unwrap();
+                        }
+                    },
+                    Err(err) => {
+                        println!(
+                            "Error when trying to get links only: {:?}",
+                            err,
+                        );
+                    },
+                }
+            }
         }
     }
 
