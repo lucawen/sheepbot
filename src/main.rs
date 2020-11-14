@@ -153,10 +153,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .help(&MY_HELP)
         .normal_message(normal_message)
-        .after(after)
-        .group(&MUSIC_GROUP)
+        .after(after)        
         .group(&FUN_GROUP)
-        .group(&CONFIG_GROUP);
+        // .group(&CONFIG_GROUP)
+        .group(&MUSIC_GROUP);
 
     let mut client = Client::builder(token)
         .event_handler(Handler)
