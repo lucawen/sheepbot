@@ -11,11 +11,10 @@ mod handler;
 mod settings;
 mod models;
 
-use sqlx::{Row, postgres::PgRow};
-use tracing::{error, info};
+// use sqlx::{Row, postgres::PgRow};
+// use tracing::{error, info};
 
 use std::{
-    sync::Arc,
     collections::HashSet,
     time::Duration,
 };
@@ -37,21 +36,18 @@ use serenity::{
 use lavalink_rs::{
     LavalinkClient
 };
+use songbird::SerenityInit;
 
 use tracing_subscriber::{
     FmtSubscriber,
     EnvFilter,
 };
-use futures::TryStreamExt;
-
 
 use crate::commands::*;
 
 use crate::handler::{
     Handler,
     Lavalink,
-    VoiceManager,
-    VoiceGuildUpdate,
     LavalinkHandler,
     ConnectionPool,
     after,
@@ -79,9 +75,7 @@ async fn my_help(
 
 #[hook]
 // Sets a custom prefix for a guild.
-pub async fn dynamic_prefix(ctx: &Context, msg: &Message) -> Option<String> {
-    let guild_id = &msg.guild_id;
-
+pub async fn dynamic_prefix(ctx: &Context, _msg: &Message) -> Option<String> {
     let data = ctx.data.read().await;
     let settings = data.get::<SettingsConf>().unwrap();
     let default_prefix = settings.discord.prefix.as_str();
@@ -158,26 +152,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .group(&CONFIG_GROUP)
         .group(&MUSIC_GROUP);
 
+    let lava_client = LavalinkClient::builder(bot_id)
+        .set_host(lavalink_url)
+        .set_password(lavalink_password)
+        .build(LavalinkHandler)
+        .await?;
+
     let mut client = Client::builder(token)
         .event_handler(Handler)
         .framework(framework)
+        .register_songbird()
         .event_handler(Handler)
         .await
         .expect("Err creating client");
 
     {
         let mut data = client.data.write().await;
-
-        data.insert::<VoiceManager>(Arc::clone(&client.voice_manager));
-        data.insert::<VoiceGuildUpdate>(Arc::new(RwLock::new(HashSet::new())));
-
-        let mut lava_client = LavalinkClient::new(bot_id);
-
-        lava_client.set_host(lavalink_url);
-        lava_client.set_password(lavalink_password);
-
-        let lava = lava_client.initialize(LavalinkHandler).await?;
-        data.insert::<Lavalink>(lava);
+        data.insert::<Lavalink>(lava_client);
 
         let pool = obtain_pool(db_url).await?;
         data.insert::<ConnectionPool>(pool);
@@ -191,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tokio::spawn(async move {
         loop {
-            tokio::time::delay_for(Duration::from_secs(30)).await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
 
             let lock = manager.lock().await;
             let shard_runners = lock.runners.lock().await;

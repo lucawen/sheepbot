@@ -17,7 +17,7 @@ use setup::*;
 
 #[group]
 #[description = "Music commands"]
-#[commands(join, leave, ping, play, now, skip)]
+#[commands(join, leave, ping, play, now_playing, skip)]
 pub(crate) struct Music;
 
 #[group]

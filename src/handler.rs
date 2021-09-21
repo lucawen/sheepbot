@@ -1,67 +1,32 @@
 use tracing::{error, info};
 
-use std::{
-    sync::Arc,
-    collections::HashSet,
-};
-
-use serenity::client::bridge::voice::ClientVoiceManager;
-
-use serenity::{
-    client::Context,
-    prelude::Mutex,
-};
+use serenity::{client::Context};
 
 use serenity::{
     async_trait,
-    client::{
-        EventHandler
-    },
-    framework::{
-        standard::{
-            CommandResult,
-            macros::{
-                hook,
-            },
-        },
-    },
+    client::EventHandler,
+    framework::standard::{macros::hook, CommandResult},
     model::{
-        channel::Message,
-        gateway::Ready,
-        id::GuildId,
-        event::VoiceServerUpdateEvent,
-        prelude::{Guild},
+        channel::Message, gateway::Ready,
+        prelude::Guild,
     },
 };
 
+use lavalink_rs::{gateway::*, model::*, LavalinkClient};
 use serenity::prelude::*;
-use lavalink_rs::{
-    LavalinkClient,
-    model::*,
-    gateway::*,
-};
-use sqlx::PgPool;
+
 use crate::settings::Settings;
+use sqlx::PgPool;
 
-use crate::utils::database::{initialize_tables};
 use crate::dynamic_prefix;
+use crate::utils::database::initialize_tables;
 
-use crate::utils::setup::{get_link_only_modes};
+use crate::utils::setup::get_link_only_modes;
 
-pub(crate) struct VoiceManager;
 pub(crate) struct Lavalink;
-pub(crate) struct VoiceGuildUpdate;
-
-impl TypeMapKey for VoiceManager {
-    type Value = Arc<Mutex<ClientVoiceManager>>;
-}
 
 impl TypeMapKey for Lavalink {
-    type Value = Arc<Mutex<LavalinkClient>>;
-}
-
-impl TypeMapKey for VoiceGuildUpdate {
-    type Value = Arc<RwLock<HashSet<GuildId>>>;
+    type Value = LavalinkClient;
 }
 
 pub(crate) struct ConnectionPool;
@@ -84,19 +49,8 @@ impl EventHandler for Handler {
         if let Some(shard) = ready.shard {
             info!(
                 "{} is connected on shard {}/{}!",
-                ready.user.name,
-                shard[0],
-                shard[1],
+                ready.user.name, shard[0], shard[1],
             );
-        }
-    }
-
-    async fn voice_server_update(&self, ctx: Context, voice: VoiceServerUpdateEvent) {
-        if let Some(guild_id) = voice.guild_id {
-            let data = ctx.data.read().await;
-            let voice_server_lock = data.get::<VoiceGuildUpdate>().unwrap();
-            let mut voice_server = voice_server_lock.write().await;
-            voice_server.insert(guild_id);
         }
     }
 
@@ -123,22 +77,19 @@ pub async fn normal_message(ctx: &Context, msg: &Message) {
     if !!!msg.content.starts_with(&prefix) && !!!msg.author.bot {
         let pool = data_read.get::<ConnectionPool>().unwrap();
         if let Some(guild_id) = msg.guild_id {
-            let rules = get_link_only_modes(
-                pool, guild_id, msg.channel_id).await;
+            let rules = get_link_only_modes(pool, guild_id, msg.channel_id).await;
             match rules {
                 Ok(res) => {
                     let string_rules = res.iter().map(|x| x.url.clone()).collect::<Vec<_>>();
 
-                    if !!!string_rules.iter().any(|i| msg.content.contains(i)) && !!!res.is_empty() {
+                    if !!!string_rules.iter().any(|i| msg.content.contains(i)) && !!!res.is_empty()
+                    {
                         msg.delete(&ctx.http).await.unwrap();
                     }
-                },
+                }
                 Err(err) => {
-                    println!(
-                        "Error when trying to get links only: {:?}",
-                        err,
-                    );
-                },
+                    println!("Error when trying to get links only: {:?}", err,);
+                }
             }
         }
     }
@@ -148,10 +99,10 @@ pub(crate) struct LavalinkHandler;
 
 #[async_trait]
 impl LavalinkEventHandler for LavalinkHandler {
-    async fn track_start(&self, _client: Arc<Mutex<LavalinkClient>>, event: TrackStart) {
+    async fn track_start(&self, _client: LavalinkClient, event: TrackStart) {
         info!("Track started!\nGuild: {}", event.guild_id);
     }
-    async fn track_finish(&self, _client: Arc<Mutex<LavalinkClient>>, event: TrackFinish) {
+    async fn track_finish(&self, _client: LavalinkClient, event: TrackFinish) {
         info!("Track finished!\nGuild: {}", event.guild_id);
     }
 }
