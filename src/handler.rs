@@ -16,24 +16,14 @@ use lavalink_rs::{gateway::*, model::*, LavalinkClient};
 use serenity::prelude::*;
 
 use crate::settings::Settings;
-use sqlx::PgPool;
 
 use crate::dynamic_prefix;
 use crate::utils::database::initialize_tables;
 
 use crate::utils::setup::get_link_only_modes;
-
-pub(crate) struct Lavalink;
-
-impl TypeMapKey for Lavalink {
-    type Value = LavalinkClient;
-}
-
-pub(crate) struct ConnectionPool;
-
-impl TypeMapKey for ConnectionPool {
-    type Value = PgPool;
-}
+use crate::{
+    ConnectionPool
+};
 
 pub(crate) struct SettingsConf;
 

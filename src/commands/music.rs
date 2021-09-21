@@ -1,231 +1,625 @@
-use serenity::client::Context;
-
+use lavalink_rs::LavalinkClient;
+use rust_clock::Clock;
 use serenity::{
+    builder::CreateEmbed,
+    client::Context,
     framework::standard::{macros::command, Args, CommandResult},
-    model::{channel::Message, misc::Mentionable},
+    model::{
+        channel::{Message, ReactionType},
+        id::{GuildId},
+    },
+};
+use std::time::Duration;
+use tokio::time::sleep;
+
+use crate::{
+    helpers::{
+        command_utils, permissions_helper,
+        voice_utils::{self, get_voice_state},
+    },
+    BotId, SheepError, Lavalink, PermissionType, SpotifyClient, VoiceTimerMap,
 };
 
-use crate::handler::{Lavalink};
-use crate::utils::message::check_msg;
-
-
 #[command]
-async fn join(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
-    let guild_id = guild.id;
+#[aliases("p")]
+async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let guild = msg.guild(ctx).await.unwrap();
+    let guild_id = msg.guild_id.unwrap();
 
-    let channel_id = guild
+    let bot_id = ctx.data.read().await.get::<BotId>().cloned().unwrap();
+
+    // TODO: Doesn't auto-summon the bot if the bot isn't in the voice channel. Check if queue is empty before running
+    if guild.voice_states.contains_key(&bot_id)
+        && !get_voice_state(ctx, &guild, msg.author.id).await?
+    {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let voice_channel_id = guild
         .voice_states
         .get(&msg.author.id)
         .and_then(|voice_state| voice_state.channel_id);
 
-    let connect_to = match channel_id {
-        Some(channel) => channel,
+    let voice_channel = voice_channel_id.unwrap();
+
+    if args.is_empty() {
+        msg.channel_id
+            .say(ctx, "Please enter a track URL after the command!")
+            .await?;
+        return Ok(());
+    }
+
+    let manager = songbird::get(ctx).await.unwrap();
+    let voice_timer_map = ctx
+        .data
+        .read()
+        .await
+        .get::<VoiceTimerMap>()
+        .cloned()
+        .unwrap();
+
+    if manager.get(guild_id).is_none() {
+        voice_utils::join_voice_internal(ctx, msg, voice_channel).await?;
+    }
+
+    if voice_timer_map.contains_key(&guild_id) {
+        if let Some(future_guard) = voice_timer_map.get(&guild_id) {
+            future_guard.value().abort();
+        }
+        voice_timer_map.remove(&guild_id);
+    }
+
+    let args_message = args.message();
+
+    let query = if args_message.contains("https://open.spotify.com") {
+        let track_id = match args_message.rsplit('/').next() {
+            Some(id) => id,
+            None => {
+                msg.channel_id
+                    .say(ctx, SheepError::MissingError("valid Spotify URL"))
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        match get_spotify_track_info(track_id, ctx).await {
+            Some(track_info) => track_info,
+            None => {
+                msg.channel_id
+                    .say(ctx, "Couldn't find the track on spotify! Check the URL?")
+                    .await?;
+                return Ok(());
+            }
+        }
+    } else {
+        args_message.to_string()
+    };
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    let query_info = lava_client.auto_search_tracks(&query).await?;
+
+    if query_info.tracks.is_empty() {
+        msg.channel_id
+            .say(ctx, "Couldn't find the video on YouTube! Check the query?")
+            .await?;
+        return Ok(());
+    }
+
+    if let Err(e) = LavalinkClient::play(&lava_client, guild_id, query_info.tracks[0].clone())
+        .queue()
+        .await
+    {
+        return Err(e.into());
+    };
+
+    let track_info = query_info.tracks[0].info.as_ref();
+
+    let mut cl = Clock::new();
+    cl.set_time_ms(track_info.unwrap().length as i64);
+
+    msg.channel_id
+        .send_message(ctx, |m| {
+            m.content("Added to queue:");
+            m.embed(|e| {
+                e.color(0x98fb98);
+                e.title(&track_info.unwrap().title);
+                e.url(&track_info.unwrap().uri);
+                e.field("Uploader", &track_info.unwrap().author, true);
+                e.field("Length", cl.get_time(), true);
+                e.footer(|f| {
+                    f.text(format!("Requested by {}", msg.author.name));
+                    f
+                })
+            })
+        })
+        .await?;
+
+    let ctx_clone = ctx.clone();
+    tokio::spawn(async move {
+        queue_checker(ctx_clone, guild_id).await;
+    });
+
+    Ok(())
+}
+
+pub async fn get_spotify_track_info(track_id: &str, ctx: &Context) -> Option<String> {
+    let spotify = ctx
+        .data
+        .read()
+        .await
+        .get::<SpotifyClient>()
+        .cloned()
+        .unwrap();
+
+    if let Ok(track) = spotify.tracks().get_track(track_id, None).await {
+        Some(track.data.name + " " + &track.data.artists[0].name)
+    } else {
+        None
+    }
+}
+
+#[command]
+async fn pause(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    if lava_client.nodes().await.contains_key(&guild_id.0) {
+        lava_client.pause(guild_id).await?;
+        msg.react(ctx, ReactionType::Unicode(String::from("⏸")))
+            .await?;
+
+        let ctx_clone = ctx.clone();
+        tokio::spawn(async move {
+            voice_utils::create_new_timer(ctx_clone, guild_id).await;
+        });
+    };
+
+    Ok(())
+}
+
+#[command]
+async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    if !lava_client.nodes().await.contains_key(&guild_id.0) {
+        msg.channel_id
+            .say(
+                ctx,
+                "The bot isn't connected to a voice channel or node! Please re-run join or play!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    lava_client.skip(guild_id).await;
+    lava_client.stop(guild_id).await?;
+    msg.react(ctx, ReactionType::Unicode(String::from("🛑")))
+        .await?;
+
+    let ctx_clone = ctx.clone();
+    tokio::spawn(async move {
+        voice_utils::create_new_timer(ctx_clone, guild_id).await;
+    });
+
+    Ok(())
+}
+
+#[command]
+#[aliases("unpause")]
+async fn resume(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    if !lava_client.nodes().await.contains_key(&guild_id.0) {
+        msg.channel_id
+            .say(
+                ctx,
+                "The bot isn't connected to a voice channel or node! Please re-run join or play!",
+            )
+            .await?;
+
+        return Ok(());
+    }
+
+    let voice_timer_map = ctx
+        .data
+        .read()
+        .await
+        .get::<VoiceTimerMap>()
+        .cloned()
+        .unwrap();
+
+    if let Some(future_guard) = voice_timer_map.get(&guild_id) {
+        future_guard.value().abort();
+    }
+
+    lava_client.resume(msg.guild_id.unwrap()).await?;
+    msg.react(ctx, ReactionType::Unicode(String::from("▶")))
+        .await?;
+
+    Ok(())
+}
+
+#[command]
+#[aliases("q")]
+async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    let nodes = lava_client.nodes().await;
+    let node = match nodes.get(&msg.guild_id.unwrap().0) {
+        Some(node) => node,
         None => {
-            check_msg(msg.reply(&ctx.http, "Join a voice channel first.").await);
+            msg.channel_id.say(ctx, "The bot isn't connected to a voice channel or node! Please re-run join or play!").await?;
 
             return Ok(());
         }
     };
 
-    let manager = songbird::get(ctx).await.unwrap().clone();
+    let queue = &node.queue;
 
-    let (_, handler) = manager.join_gateway(guild_id, connect_to).await;
+    if queue.is_empty() && node.now_playing.is_none() {
+        msg.channel_id
+            .say(ctx, "The queue is currently empty!")
+            .await?;
 
-    match handler {
-        Ok(connection_info) => {
-            let data = ctx.data.read().await;
-            let lava_client = data.get::<Lavalink>().unwrap().clone();
-            lava_client
-                .create_session_with_songbird(&connection_info)
+        return Ok(());
+    }
+
+    let mut eb = CreateEmbed::default();
+    eb.color(0x0377fc);
+    eb.title(format!("Queue for {}", guild_id.name(ctx).await.unwrap()));
+
+    if let Some(t) = node.now_playing.as_ref() {
+        let t_info = t.track.info.as_ref();
+
+        let mut cl = Clock::new();
+        cl.set_time_ms(t_info.unwrap().length as i64);
+        eb.field(
+            "Now Playing",
+            format!(
+                "[{}]({}) | `{}`",
+                t_info.unwrap().title,
+                t_info.unwrap().uri,
+                cl.get_time()
+            ),
+            false,
+        );
+    }
+
+    if queue.len() > 1 {
+        let mut queue_string = String::new();
+
+        for (num, t) in queue.iter().enumerate().skip(1) {
+            let t_info = t.track.info.as_ref();
+
+            let mut cl = Clock::new();
+            cl.set_time_ms(t_info.unwrap().length as i64);
+            queue_string.push_str(&format!(
+                "{}. [{}]({}) | `{}` \n\n",
+                num,
+                t_info.unwrap().title,
+                t_info.unwrap().uri,
+                cl.get_time()
+            ));
+        }
+
+        eb.field("Next Songs", queue_string, false);
+    }
+
+    msg.channel_id
+        .send_message(ctx, |m| {
+            m.embed(|e| {
+                e.0 = eb.0;
+                e
+            })
+        })
+        .await?;
+
+    Ok(())
+}
+
+async fn queue_checker(ctx: Context, guild_id: GuildId) {
+    loop {
+        sleep(Duration::from_secs(60)).await;
+        {
+            let (voice_timer_map, lava_client) = {
+                let data = ctx.data.read().await;
+                let voice_timer_map = data.get::<VoiceTimerMap>().cloned().unwrap();
+                let lava_client = data.get::<Lavalink>().cloned().unwrap();
+
+                (voice_timer_map, lava_client)
+            };
+
+            if voice_timer_map.get(&guild_id).is_some() {
+                return;
+            }
+
+            let nodes = lava_client.nodes().await;
+            let node = match nodes.get(&guild_id.0) {
+                Some(node) => node,
+                None => return,
+            };
+
+            if node.queue.is_empty() && node.now_playing.is_none() {
+                let ctx_clone = ctx.clone();
+                tokio::spawn(async move {
+                    voice_utils::create_new_timer(ctx_clone, guild_id).await;
+                });
+                return;
+            }
+        }
+    }
+}
+
+#[command]
+#[aliases("c")]
+async fn clear(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    let nodes = lava_client.nodes().await;
+    let mut node = match nodes.get_mut(&msg.guild_id.unwrap().0) {
+        Some(node) => node,
+        None => {
+            msg.channel_id.say(
+                ctx, "The bot isn't connected to a voice channel or node! Please re-run join or play!").await?;
+            return Ok(());
+        }
+    };
+
+    if !permissions_helper::check_permission(ctx, msg, None, false).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                SheepError::PermissionError(PermissionType::UserPerm("manage messages")),
+            )
+            .await?;
+    } else {
+        node.queue.drain(1..);
+
+        msg.react(ctx, ReactionType::Unicode(String::from("💣")))
+            .await?;
+    }
+
+    Ok(())
+}
+
+#[command]
+#[aliases("r")]
+async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    let nodes = lava_client.nodes().await;
+    let mut node = match nodes.get_mut(&msg.guild_id.unwrap().0) {
+        Some(node) => node,
+        None => {
+            msg.channel_id.say(
+                ctx, "The bot isn't connected to a voice channel or node! Please re-run join or play!").await?;
+            return Ok(());
+        }
+    };
+
+    let clear_num = match args.single::<usize>() {
+        Ok(size) => {
+            if size == 0 {
+                msg.channel_id
+                    .say(ctx, SheepError::MissingError("number greater than 0"))
+                    .await?;
+
+                return Ok(());
+            }
+
+            size
+        }
+        Err(_) => {
+            msg.channel_id
+                .say(ctx, SheepError::MissingError("number"))
                 .await?;
 
-            check_msg(
-                msg.channel_id
-                    .say(&ctx.http, &format!("Joined {}", connect_to.mention()))
-                    .await,
-            );
+            return Ok(());
         }
-        Err(why) => check_msg(
-            msg.channel_id
-                .say(&ctx.http, format!("Error joining the channel: {}", why))
-                .await,
-        ),
-    }
+    };
 
-    Ok(())
-}
+    let queue = &mut node.queue;
 
-#[command]
-async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
-    let guild_id = guild.id;
-
-    //let lava_client = {
-    //    let data = ctx.data.read().await;
-    //    data.get::<Lavalink>().unwrap().clone()
-    //};
-
-    //lava_client.destroy(guild_id).await?;
-    //lava_client.leave(guild_id).await?;
-
-    let manager = songbird::get(ctx).await.unwrap().clone();
-    let has_handler = manager.get(guild_id).is_some();
-
-    if has_handler {
-        if let Err(e) = manager.remove(guild_id).await {
-            check_msg(
-                msg.channel_id
-                    .say(&ctx.http, format!("Failed: {:?}", e))
-                    .await,
-            );
-        }
-
-        {
-            let data = ctx.data.read().await;
-            let lava_client = data.get::<Lavalink>().unwrap().clone();
-            lava_client.destroy(guild_id).await?;
-        }
-
-        check_msg(msg.channel_id.say(&ctx.http, "Left voice channel").await);
-    } else {
-        check_msg(msg.reply(&ctx.http, "Not in a voice channel").await);
-    }
-
-    Ok(())
-}
-
-#[command]
-async fn ping(context: &Context, msg: &Message) -> CommandResult {
-    check_msg(msg.channel_id.say(&context.http, "Pong!").await);
-
-    Ok(())
-}
-
-#[command]
-#[min_args(1)]
-async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let query = args.message().to_string();
-
-    let guild_id = match ctx.cache.guild_channel(msg.channel_id).await {
-        Some(channel) => channel.guild_id,
+    let track_queue = match queue.get(clear_num) {
+        Some(track_queue) => track_queue,
         None => {
-            check_msg(
-                msg.channel_id
-                    .say(&ctx.http, "Error finding channel info")
-                    .await,
-            );
+            msg.channel_id
+                .say(ctx, "This number doesn't exist in the queue!")
+                .await?;
 
             return Ok(());
         }
     };
 
-    let lava_client = {
-        let data = ctx.data.read().await;
-        data.get::<Lavalink>().unwrap().clone()
-    };
+    let name = track_queue.track.info.as_ref().unwrap().title.clone();
 
-    let manager = songbird::get(ctx).await.unwrap().clone();
+    queue.remove(clear_num);
 
-    if let Some(_handler) = manager.get(guild_id) {
-        //let connections = lava_client.discord_gateway_connections().await;
-        //if connections.contains_key(&guild_id.into()) {
-        let query_information = lava_client.auto_search_tracks(&query).await?;
-
-        if query_information.tracks.is_empty() {
-            check_msg(
-                msg.channel_id
-                    .say(&ctx, "Could not find any video of the search query.")
-                    .await,
-            );
-            return Ok(());
-        }
-
-        if let Err(why) = &lava_client
-            .play(guild_id, query_information.tracks[0].clone())
-            // Change this to play() if you want your own custom queue or no queue at all.
-            .queue()
-            .await
-        {
-            eprintln!("{}", why);
-            return Ok(());
-        };
-        check_msg(
-            msg.channel_id
-                .say(
-                    &ctx.http,
-                    format!(
-                        "Added to queue: {}",
-                        query_information.tracks[0].info.as_ref().unwrap().title
-                    ),
-                )
-                .await,
-        );
-    } else {
-        check_msg(
-            msg.channel_id
-                .say(
-                    &ctx.http,
-                    "Use `~join` first, to connect the bot to your current voice channel.",
-                )
-                .await,
-        );
-    }
+    msg.channel_id
+        .say(ctx, format!("Successfully removed track {}", name))
+        .await?;
 
     Ok(())
 }
 
 #[command]
-#[aliases(np)]
-async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
-    let data = ctx.data.read().await;
-    let lava_client = data.get::<Lavalink>().unwrap().clone();
-
-    if let Some(node) = lava_client.nodes().await.get(&msg.guild_id.unwrap().0) {
-        if let Some(track) = &node.now_playing {
-            check_msg(
-                msg.channel_id
-                    .say(
-                        &ctx.http,
-                        format!("Now Playing: {}", track.track.info.as_ref().unwrap().title),
-                    )
-                    .await,
-            );
-        } else {
-            check_msg(
-                msg.channel_id
-                    .say(&ctx.http, "Nothing is playing at the moment.")
-                    .await,
-            );
-        }
-    } else {
-        check_msg(
-            msg.channel_id
-                .say(&ctx.http, "Nothing is playing at the moment.")
-                .await,
-        );
-    }
-
-    Ok(())
-}
-
-#[command]
+#[aliases("s")]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
-    let data = ctx.data.read().await;
-    let lava_client = data.get::<Lavalink>().unwrap().clone();
+    let guild_id = msg.guild_id.unwrap();
+    let guild = msg.guild(ctx).await.unwrap();
 
-    if let Some(track) = lava_client.skip(msg.guild_id.unwrap()).await {
-        check_msg(
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    if !lava_client.nodes().await.contains_key(&guild_id.0) {
+        msg.channel_id
+            .say(
+                ctx,
+                "The bot isn't connected to a voice channel or playing anything! Please re-run join or play!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    if lava_client.skip(guild_id).await.is_some() {
+        let nodes = lava_client.nodes().await;
+        let node = nodes.get(&msg.guild_id.unwrap().0).unwrap();
+
+        if node.queue.is_empty() && node.now_playing.is_none() {
+            lava_client.stop(guild_id).await?;
+        }
+    }
+
+    msg.react(ctx, ReactionType::Unicode(String::from("⏭️")))
+        .await?;
+
+    Ok(())
+}
+
+#[command]
+async fn seek(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let guild_id = msg.guild_id.unwrap();
+    let guild = msg.guild(ctx).await.unwrap();
+
+    if !get_voice_state(ctx, &guild, msg.author.id).await? {
+        msg.channel_id
+            .say(
+                ctx,
+                "Please be in a voice channel or in the same voice channel as me!",
+            )
+            .await?;
+        return Ok(());
+    }
+
+    if args.is_empty() {
+        msg.channel_id
+            .say(ctx, "Please provide a valid number of seconds!")
+            .await?;
+        return Ok(());
+    }
+
+    let time = match command_utils::deconstruct_time(args.single::<String>().unwrap()) {
+        Ok(time) => time,
+        Err(e) => {
             msg.channel_id
                 .say(
                     ctx,
-                    format!("Skipped: {}", track.track.info.as_ref().unwrap().title),
+                    SheepError::MissingError(&format!("valid amount of {}", e)),
                 )
-                .await,
-        );
-    } else {
-        check_msg(msg.channel_id.say(&ctx.http, "Nothing to skip.").await);
-    }
+                .await?;
+
+            return Ok(());
+        }
+    };
+
+    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+
+    if !lava_client.nodes().await.contains_key(&guild_id.0) {
+        msg.channel_id
+            .say(
+                ctx,
+                "The bot isn't connected to a voice channel or playing anything! Please re-run join or play!",
+            )
+            .await?;
+        return Ok(());
+    };
+
+    lava_client
+        .seek(guild_id, Duration::from_secs(time))
+        .await?;
+
+    msg.channel_id.say(ctx, "Seeking!").await?;
 
     Ok(())
 }

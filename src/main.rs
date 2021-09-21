@@ -10,14 +10,16 @@ mod utils;
 mod handler;
 mod settings;
 mod models;
-
-// use sqlx::{Row, postgres::PgRow};
-// use tracing::{error, info};
+mod helpers;
+mod structures;
 
 use std::{
     collections::HashSet,
     time::Duration,
+    sync::{Arc},
 };
+use dashmap::DashMap;
+use futures::future::AbortHandle;
 
 use serenity::{
     http::Http,
@@ -30,6 +32,7 @@ use serenity::{
         macros::{help, hook},
     },
     model::prelude::*,
+    model::id::GuildId,
     prelude::*,
 };
 
@@ -47,12 +50,15 @@ use crate::commands::*;
 
 use crate::handler::{
     Handler,
-    Lavalink,
     LavalinkHandler,
-    ConnectionPool,
     after,
     SettingsConf,
     normal_message
+};
+use crate::{
+    helpers::{command_utils, database_helper},
+    structures::{cmd_data::*, commands::*, errors::*},
+    Lavalink
 };
 
 use settings::Settings;
@@ -136,6 +142,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(why) => panic!("Could not access application info: {:?}", why),
     };
+
+    let voice_timer_map: DashMap<GuildId, AbortHandle> = DashMap::new();
     
 
     let framework = StandardFramework::new()
@@ -168,11 +176,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let mut data = client.data.write().await;
-        data.insert::<Lavalink>(lava_client);
-
         let pool = obtain_pool(db_url).await?;
+        
+        data.insert::<Lavalink>(lava_client);
         data.insert::<ConnectionPool>(pool);
         data.insert::<SettingsConf>(settings);
+        data.insert::<VoiceTimerMap>(Arc::new(voice_timer_map));
     }
 
     // Here we clone a lock to the Shard Manager, and then move it into a new

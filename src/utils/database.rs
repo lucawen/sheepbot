@@ -1,6 +1,9 @@
 use tracing::{error};
 
-use crate::handler::{ConnectionPool, SettingsConf};
+use crate::handler::{SettingsConf};
+use crate::{
+    ConnectionPool
+};
 
 use serenity::{model::prelude::Guild, prelude::Context};
 use sqlx::postgres::{PgPool, PgPoolOptions};

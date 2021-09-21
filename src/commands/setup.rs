@@ -11,7 +11,9 @@ use serenity::{
 };
 use crate::utils::message::{check_msg};
 
-use crate::handler::{ConnectionPool};
+use crate::{
+    ConnectionPool
+};
 use url::{Url, ParseError};
 use crate::utils::setup::{get_link_only_modes};
 
