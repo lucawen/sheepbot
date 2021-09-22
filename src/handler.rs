@@ -1,4 +1,4 @@
-use tracing::{error, info};
+use tracing::{info};
 
 use serenity::{client::Context};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serenity::{
     async_trait,
     client::EventHandler,
-    framework::standard::{macros::hook, CommandResult, CommandError},
+    framework::standard::{macros::hook, CommandError},
     model::{
         guild::{Guild, GuildUnavailable},
         id::GuildId,
@@ -56,10 +56,10 @@ impl EventHandler for Handler {
             .unwrap();
 
         if is_new {
-            sqlx::query!(
-                "INSERT INTO guild_info VALUES($1, null) ON CONFLICT DO NOTHING",
-                guild.id.0 as i64
+            sqlx::query(
+                "INSERT INTO guild_info VALUES($1, null) ON CONFLICT DO NOTHING"
             )
+            .bind(guild.id.0 as i64)
             .execute(&pool)
             .await
             .unwrap();
@@ -75,10 +75,10 @@ impl EventHandler for Handler {
             (pool, prefixes)
         };
 
-        if let Err(e) = sqlx::query!(
+        if let Err(e) = sqlx::query(
             "DELETE FROM guild_info WHERE guild_id = $1",
-            incomplete.id.0 as i64
         )
+        .bind(incomplete.id.0 as i64)
         .execute(&pool)
         .await
         {

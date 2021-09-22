@@ -6,3 +6,9 @@ pub struct OnlyLinkChannel {
     pub user_id: i64,
     pub url: String
 }
+
+#[derive(sqlx::FromRow)]
+pub struct BotInfo {
+    pub guild_id: i64,
+    pub prefix: String
+}

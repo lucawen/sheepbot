@@ -8,6 +8,9 @@ use serenity::{
 };
 use std::time::{Duration};
 use tokio::time::sleep;
+use crate::models::{
+    BotInfo
+};
 
 pub async fn guild_pruner(ctx: &Context) -> CommandResult {
     let pool = ctx
@@ -20,9 +23,12 @@ pub async fn guild_pruner(ctx: &Context) -> CommandResult {
 
     let guilds = ctx.cache.guilds().await;
 
-    let guild_data = sqlx::query!("SELECT guild_id FROM guild_info")
+    let guild_data = sqlx::query_as::<_, BotInfo>(
+        "SELECT guild_id, prefix FROM guild_info"
+        )
         .fetch_all(&pool)
         .await?;
+
 
     println!(" ");
 
@@ -30,7 +36,8 @@ pub async fn guild_pruner(ctx: &Context) -> CommandResult {
         if !guilds.contains(&GuildId::from(guild.guild_id as u64)) {
             println!("Removing guild: {}", guild.guild_id);
 
-            sqlx::query!("DELETE FROM guild_info WHERE guild_id = $1", guild.guild_id)
+            sqlx::query("DELETE FROM guild_info WHERE guild_id = ?")
+                .bind(guild.guild_id)
                 .execute(&pool)
                 .await?;
         }

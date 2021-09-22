@@ -1,6 +1,10 @@
 use dashmap::DashMap;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use serenity::{model::id::GuildId};
+use crate::models::{
+    BotInfo
+};
+use sqlx::{Pool, Postgres};
 
 pub async fn obtain_db_pool(db_connection: &str) -> Result<PgPool, Box<dyn std::error::Error>> {
     let connection_string = &db_connection;
@@ -13,16 +17,18 @@ pub async fn obtain_db_pool(db_connection: &str) -> Result<PgPool, Box<dyn std::
     Ok(pool)
 }
 
-pub async fn fetch_prefixes(pool: &PgPool) -> Result<DashMap<GuildId, String>, Box<dyn std::error::Error>>{
+pub async fn fetch_prefixes(pool: &Pool<Postgres>) -> Result<DashMap<GuildId, String>, Box<dyn std::error::Error>>{
     let prefixes: DashMap<GuildId, String> = DashMap::new();
 
-    let cursor = sqlx::query!("SELECT guild_id, prefix FROM guild_info")
+    let cursor = sqlx::query_as::<_, BotInfo>(
+        "SELECT guild_id, prefix FROM guild_info"
+        )
         .fetch_all(pool)
         .await?;
 
     for i in cursor {
-        if let Some(prefix) = i.prefix {
-            prefixes.insert(GuildId::from(i.guild_id as u64), prefix);
+        if !!!i.prefix.is_empty() {
+            prefixes.insert(GuildId::from(i.guild_id as u64), i.prefix);
         }
     }
 
