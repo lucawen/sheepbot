@@ -15,10 +15,17 @@ pub struct Lavalink {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct Spotify {
+    pub client_id: String,
+    pub client_token: String
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Settings {
     pub database_url: String,
     pub discord: Discord,
     pub lavalink: Lavalink,
+    pub spotify: Spotify,
 }
 
 impl Settings {

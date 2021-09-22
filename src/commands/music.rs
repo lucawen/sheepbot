@@ -22,6 +22,7 @@ use crate::{
 
 #[command]
 #[aliases("p")]
+#[description = "play <URL or search keywords> : Plays the specified track"]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let guild = msg.guild(ctx).await.unwrap();
     let guild_id = msg.guild_id.unwrap();
@@ -166,6 +167,7 @@ pub async fn get_spotify_track_info(track_id: &str, ctx: &Context) -> Option<Str
 }
 
 #[command]
+#[description = "pause: Pauses the current track"]
 async fn pause(ctx: &Context, msg: &Message) -> CommandResult {
     let guild_id = msg.guild_id.unwrap();
     let guild = msg.guild(ctx).await.unwrap();
@@ -197,6 +199,7 @@ async fn pause(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[description = "Stops the current track and empties the queue. Doesn't disconnect the bot"]
 async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
     let guild_id = msg.guild_id.unwrap();
     let guild = msg.guild(ctx).await.unwrap();
@@ -238,6 +241,7 @@ async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[aliases("unpause")]
+#[description = "resume <author> <text>: Resumes the current track"]
 async fn resume(ctx: &Context, msg: &Message) -> CommandResult {
     let guild_id = msg.guild_id.unwrap();
     let guild = msg.guild(ctx).await.unwrap();
@@ -286,6 +290,7 @@ async fn resume(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[aliases("q")]
+#[description = "See the current queue for the guild and what's playing"]
 async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
     let guild_id = msg.guild_id.unwrap();
     let guild = msg.guild(ctx).await.unwrap();
@@ -410,6 +415,7 @@ async fn queue_checker(ctx: Context, guild_id: GuildId) {
 
 #[command]
 #[aliases("c")]
+#[description = "clear (track number): either clears the entire queue, or removes a specific track"]
 async fn clear(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(ctx).await.unwrap();
 
@@ -526,6 +532,7 @@ async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 #[aliases("s")]
+#[description = "Skips the current track. If there are no tracks in the queue, the player is stopped"]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     let guild_id = msg.guild_id.unwrap();
     let guild = msg.guild(ctx).await.unwrap();
@@ -568,6 +575,7 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[description = "seek <time>: Seeks in the current track using hh:mm:ss format. mm:ss is also supported"]
 async fn seek(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let guild_id = msg.guild_id.unwrap();
     let guild = msg.guild(ctx).await.unwrap();

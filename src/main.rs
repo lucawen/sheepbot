@@ -14,9 +14,9 @@ mod helpers;
 mod structures;
 
 use std::{
-    collections::HashSet,
+    collections::{HashSet},
     time::Duration,
-    sync::{Arc},
+    sync::{atomic::AtomicBool, Arc},
 };
 use dashmap::DashMap;
 use futures::future::AbortHandle;
@@ -29,7 +29,7 @@ use serenity::{
     framework::standard::{
         Args, StandardFramework, CommandGroup,
         HelpOptions, help_commands, CommandResult,
-        macros::{help, hook},
+        macros::{help},
     },
     model::prelude::*,
     model::id::GuildId,
@@ -52,18 +52,17 @@ use crate::handler::{
     Handler,
     LavalinkHandler,
     after,
-    SettingsConf,
-    normal_message
+    dynamic_prefix
 };
 use crate::{
-    helpers::{command_utils, database_helper},
-    structures::{cmd_data::*, commands::*, errors::*},
+    helpers::{database_helper},
+    structures::{cmd_data::*, errors::*},
     Lavalink
 };
+use aspotify::{Client as Spotify, ClientCredentials};
 
 use settings::Settings;
 
-use crate::utils::database::{obtain_pool};
 
 
 #[help]
@@ -79,39 +78,6 @@ async fn my_help(
     Ok(())
 }
 
-#[hook]
-// Sets a custom prefix for a guild.
-pub async fn dynamic_prefix(ctx: &Context, _msg: &Message) -> Option<String> {
-    let data = ctx.data.read().await;
-    let settings = data.get::<SettingsConf>().unwrap();
-    let default_prefix = settings.discord.prefix.as_str();
-
-    let prefix: String;
-    // TODO: Fix prefix from database
-    // if let Some(id) = guild_id {
-    //     let pool = data.get::<ConnectionPool>().unwrap();
-
-    //     let res = sqlx::query(
-    //         "SELECT prefix FROM prefixes WHERE guild_id = $1",
-    //     )
-    //     .bind(id.0 as i64)
-    //     .fetch_one(pool)
-    //     .await;
-
-    //     prefix = if let Ok(data) = res {
-    //         data.try_get("prefix").unwrap_or(default_prefix.to_string())
-    //     } else {
-    //         error!("I couldn't query the database for getting guild prefix.");
-    //         default_prefix.to_string()
-    //     }
-    // } else {
-    //     prefix = default_prefix.to_string();
-    // };
-
-    prefix = default_prefix.to_string();
-
-    Some(prefix)
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -144,20 +110,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let voice_timer_map: DashMap<GuildId, AbortHandle> = DashMap::new();
-    
+
+    let client_credentials = ClientCredentials {
+        id: settings.spotify.client_id.to_string(),
+        secret: settings.spotify.client_token.to_string()
+    };
+
+    let spotify = Spotify::new(client_credentials);
+
+    let pool = database_helper::obtain_db_pool(db_url).await?;
+    let prefixes = database_helper::fetch_prefixes(&pool).await?;
 
     let framework = StandardFramework::new()
         .configure(|c| {
             c.owners(owners)
                 .dynamic_prefix(dynamic_prefix)
+                .prefix("")
                 .with_whitespace(false)
                 .on_mention(Some(bot_id))
         })
         .help(&MY_HELP)
-        .normal_message(normal_message)
         .after(after)        
         .group(&FUN_GROUP)
-        // .group(&CONFIG_GROUP)
+        .group(&VOICE_GROUP)
         .group(&MUSIC_GROUP);
 
     let lava_client = LavalinkClient::builder(bot_id)
@@ -167,21 +142,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut client = Client::builder(token)
-        .event_handler(Handler)
+        .event_handler(Handler {
+            run_loop: AtomicBool::new(true),
+        })
         .framework(framework)
         .register_songbird()
-        .event_handler(Handler)
         .await
         .expect("Err creating client");
 
     {
         let mut data = client.data.write().await;
-        let pool = obtain_pool(db_url).await?;
         
         data.insert::<Lavalink>(lava_client);
         data.insert::<ConnectionPool>(pool);
         data.insert::<SettingsConf>(settings);
         data.insert::<VoiceTimerMap>(Arc::new(voice_timer_map));
+        data.insert::<BotId>(bot_id);
+        data.insert::<SpotifyClient>(Arc::new(spotify));
+        data.insert::<PrefixMap>(Arc::new(prefixes));
     }
 
     // Here we clone a lock to the Shard Manager, and then move it into a new
