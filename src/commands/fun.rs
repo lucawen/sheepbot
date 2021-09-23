@@ -7,7 +7,13 @@ use std::{
     io::Cursor,
     path::Path,
     fs::{remove_file},
-    sync::{Arc, Weak}
+    sync::{Arc, Weak, mpsc}
+};
+use notify::{
+    RecommendedWatcher,
+    RecursiveMode,
+    Watcher,
+    RawEvent,
 };
 
 use serenity::{client::Context};
@@ -171,6 +177,8 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
     let mut content = Cursor::new(content_byte);
     copy(&mut content, &mut file).await?;
 
+    wait_until_file_created(&filepath, "/tmp".to_string()).unwrap();
+
     let channel_id = guild
         .voice_states.get(&msg.author.id)
         .and_then(|voice_state| voice_state.channel_id);
@@ -221,4 +229,31 @@ impl VoiceEventHandler for EndPlaySound {
         }
         None
     }
+}
+
+fn wait_until_file_created(file_path: &String, parent_path: String) -> Result<(), Box<dyn std::error::Error>> {
+    // Create a channel to receive the events.
+    let (tx, rx) = mpsc::channel();
+
+    // Automatically select the best implementation for your platform.
+    // You can also access each implementation directly e.g. INotifyWatcher.
+    let mut watcher: RecommendedWatcher = Watcher::new_raw(tx)?;
+
+    // Watcher can't be registered for file that don't exists.
+    // I use its parent directory instead, because I'm sure that it always exists
+    let parent_path_new = Path::new(&parent_path);
+    watcher.watch(&parent_path, RecursiveMode::NonRecursive)?;
+    if !parent_path_new.exists() {
+        loop {
+            match rx.recv_timeout(Duration::from_secs(2))? {
+                RawEvent { path: Some(p), op: Ok(notify::op::CREATE), .. } => 
+                    if &p.into_os_string().into_string().unwrap() == file_path {
+                        break
+                    },
+                _ => continue,
+            }
+        }
+    }
+    watcher.unwatch(&parent_path)?;
+    Ok(())
 }

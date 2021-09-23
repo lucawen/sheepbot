@@ -24,6 +24,7 @@ regex = "1.5.4"
 aspotify = "0.7.0"
 tts-urls = "1.0.0"
 reqwest = "0.11.4"
+notify = "4.0.17"
 
 [dependencies.serenity]
 version = "0.10.9"
