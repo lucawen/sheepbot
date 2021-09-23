@@ -1,8 +1,12 @@
-use tokio::time::{sleep, Duration};
+use tokio::{
+    fs::File,
+    io::copy,
+    time::{sleep, Duration}
+};
 use std::{
     io::Cursor,
     path::Path,
-    fs::{remove_file, File},
+    fs::{remove_file},
     sync::{Arc, Weak}
 };
 
@@ -40,7 +44,6 @@ use songbird::{
     },
     Call,
 };
-use tempfile::Builder;
 
 
 #[command]
@@ -163,10 +166,10 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
         .await?;
     
     let filepath = format!("/tmp/{}.mp3", random_fname);
-    let mut file = File::create(&filepath)?;
+    let mut file = File::create(&filepath).await?;
     let content_byte = response.bytes().await?;
     let mut content = Cursor::new(content_byte);
-    std::io::copy(&mut content, &mut file)?;
+    copy(&mut content, &mut file).await?;
 
     let channel_id = guild
         .voice_states.get(&msg.author.id)
