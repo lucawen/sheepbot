@@ -130,11 +130,10 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
     let manager = songbird::get(ctx).await
         .expect("Songbird Voice client placed in at initialisation.").clone();
 
-    let (reqwest_client, lavalink_client) = {
+    let lavalink_client = {
         let data = ctx.data.read().await;
-        let reqwest_client = data.get::<ReqwestClient>().cloned().unwrap();
         let lavalink_client = data.get::<Lavalink>().cloned().unwrap();
-        (reqwest_client, lavalink_client)
+        lavalink_client
     };
 
     if !!!lavalink_client.nodes().await.get(&msg.guild_id.unwrap().0).is_none()  {
@@ -158,27 +157,6 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
         })
         .await?;
 
-    // Save the image.
-    let random_fname: String  = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(20)
-        .map(char::from)
-        .collect();
-
-    let tts_url = google_translate::url(&msg_received, "pt-br");
-    let response = reqwest_client
-        .get(tts_url)
-        .send()
-        .await?;
-    
-    let filepath = format!("/tmp/{}.mp3", random_fname);
-    let mut file = File::create(&filepath).await?;
-    let content_byte = response.bytes().await?;
-    let mut content = Cursor::new(content_byte);
-    copy(&mut content, &mut file).await?;
-
-    wait_until_file_created(&filepath, "/tmp".to_string()).unwrap();
-
     let channel_id = guild
         .voice_states.get(&msg.author.id)
         .and_then(|voice_state| voice_state.channel_id);
@@ -197,13 +175,14 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
 
     if let Ok(_reader) = success_reader {
         let mut handler = handler_lock.lock().await;
-        let ting_src = input::ffmpeg(&filepath).await.expect("Cant get tts file");
+        let tts_url = google_translate::url(&msg_received, "pt-br");
+
+        let ting_src = input::ffmpeg(tts_url).await.expect("Cant get tts file");
         let song = handler.play_source(ting_src);
         let _ = song.add_event(
             Event::Track(TrackEvent::End),
             EndPlaySound {
-                call_lock: call_lock_for_evt,
-                filename: filepath,
+                call_lock: call_lock_for_evt
             },
         );
     } else {
@@ -214,8 +193,7 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
 }
 
 struct EndPlaySound {
-    call_lock: Weak<Mutex<Call>>,
-    filename: String,
+    call_lock: Weak<Mutex<Call>>
 }
 
 #[async_trait]
@@ -224,8 +202,6 @@ impl VoiceEventHandler for EndPlaySound {
         if let Some(call_lock) = self.call_lock.upgrade() {
             let mut handler = call_lock.lock().await;
             handler.leave().await.unwrap();
-            remove_file(&self.filename)
-                .expect("Cant remove tts file file");
         }
         None
     }
