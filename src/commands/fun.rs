@@ -40,6 +40,7 @@ use songbird::{
     },
     Call,
 };
+use tempfile::Builder;
 
 
 #[command]
@@ -133,19 +134,13 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
     }
 
     let msg_received = args.message().to_string();
-    let tts_url = google_translate::url(&msg_received, "pt-br");
-
-    let response = reqwest_client
-        .get(tts_url)
-        .send()
-        .await?;
 
     msg.channel_id
         .send_message(ctx, |m| {
             m.embed(|e| {
                 e.color(0x98fb98);
                 e.title("Sheep are saying");
-                e.field("Message: ", msg_received, true);
+                e.field("Message: ", &msg_received, true);
                 e.footer(|f| {
                     f.text(format!("Requested by {}", msg.author.name));
                     f
@@ -161,12 +156,16 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
         .map(char::from)
         .collect();
 
-    let filepath = format!("./{}.mp3", random_fname);
-    let path = Path::new(&filepath);
-
-    let mut file = File::create(&path).unwrap();
+    let tts_url = google_translate::url(&msg_received, "pt-br");
+    let response = reqwest_client
+        .get(tts_url)
+        .send()
+        .await?;
+    
+    let filepath = format!("/tmp/{}.mp3", random_fname);
+    let mut file = File::create(&filepath)?;
     let content_byte = response.bytes().await?;
-    let mut content =  Cursor::new(content_byte);
+    let mut content = Cursor::new(content_byte);
     std::io::copy(&mut content, &mut file)?;
 
     let channel_id = guild
