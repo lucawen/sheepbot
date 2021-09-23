@@ -161,7 +161,7 @@ pub(self) async fn tts(ctx: &Context, msg: &Message, args: Args) -> CommandResul
         .map(char::from)
         .collect();
 
-    let filepath = format!("/tmp/{}.mp3", random_fname);
+    let filepath = format!("./{}.mp3", random_fname);
     let path = Path::new(&filepath);
 
     let mut file = File::create(&path).unwrap();
