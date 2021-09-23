@@ -24,7 +24,7 @@ pub(crate) struct Music;
 
 #[group]
 #[description = "Fun commands"]
-#[commands(rojao, huehue, qrcode)]
+#[commands(rojao, huehue, qrcode, tts)]
 pub(crate) struct Fun;
 
 #[group]

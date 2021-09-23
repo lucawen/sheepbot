@@ -112,14 +112,44 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             .await?;
         return Ok(());
     }
-
-    if let Err(e) = LavalinkClient::play(&lava_client, guild_id, query_info.tracks[0].clone())
-        .queue()
-        .await
-    {
-        return Err(e.into());
-    };
-
+    let mut title_message = "Added to queue:";
+    if query_info.load_type == "PLAYLIST_LOADED" {
+        let total_songs = query_info.tracks.len();
+        if let Some(playlist_info) = &query_info.playlist_info {
+            if let Some(playlist_name) = &playlist_info.name {
+                msg.channel_id
+                .send_message(ctx, |m| {
+                    m.embed(|e| {
+                        e.color(0x98fb98);
+                        e.title(format!("Playlist {} identified", playlist_name));
+                        e.url(&query);
+                        e.field("Total songs", total_songs, true);
+                        e.footer(|f| {
+                            f.text(format!("Requested by {}", msg.author.name));
+                            f
+                        })
+                    })
+                })
+                .await?;
+            }
+        }
+        for track in query_info.tracks.iter() {
+            if let Err(e) = LavalinkClient::play(&lava_client, guild_id, track.clone())
+                .queue()
+                .await
+            {
+                continue;
+            };
+        }
+        title_message = "Playing the playlist with first song:";
+    } else {
+        if let Err(e) = LavalinkClient::play(&lava_client, guild_id, query_info.tracks[0].clone())
+            .queue()
+            .await
+        {
+            return Err(e.into());
+        };
+    }
     let track_info = query_info.tracks[0].info.as_ref();
 
     let mut cl = Clock::new();
@@ -127,7 +157,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     msg.channel_id
         .send_message(ctx, |m| {
-            m.content("Added to queue:");
+            m.content(title_message);
             m.embed(|e| {
                 e.color(0x98fb98);
                 e.title(&track_info.unwrap().title);

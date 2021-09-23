@@ -5,12 +5,20 @@ use serenity::{
     model::id::{GuildId, UserId},
 };
 use std::{
+    convert::TryInto,
     sync::Arc
 };
 use dashmap::DashMap;
 use futures::future::AbortHandle;
 use sqlx::PgPool;
 use crate::settings::Settings;
+use reqwest::Client as Reqwest;
+use songbird::{
+    input::{
+        cached::{Compressed, Memory},
+        Input,
+    },
+};
 
 pub struct Lavalink;
 
@@ -52,4 +60,28 @@ pub struct PrefixMap;
 
 impl TypeMapKey for PrefixMap {
     type Value = Arc<DashMap<GuildId, String>>;
+}
+
+pub struct ReqwestClient;
+
+impl TypeMapKey for ReqwestClient {
+    type Value = Reqwest;
+}
+
+pub enum CachedSound {
+    Compressed(Compressed),
+    Uncompressed(Memory),
+}
+
+impl From<&CachedSound> for Input {
+    fn from(obj: &CachedSound) -> Self {
+        use CachedSound::*;
+        match obj {
+            Compressed(c) => c.new_handle()
+                .into(),
+            Uncompressed(u) => u.new_handle()
+                .try_into()
+                .expect("Failed to create decoder for Memory source."),
+        }
+    }
 }

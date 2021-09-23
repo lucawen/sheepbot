@@ -35,6 +35,7 @@ use serenity::{
     model::id::GuildId,
     prelude::*,
 };
+use reqwest::Client as Reqwest;
 
 use lavalink_rs::{
     LavalinkClient
@@ -121,6 +122,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = database_helper::obtain_db_pool(db_url).await?;
     let prefixes = database_helper::fetch_prefixes(&pool).await?;
 
+    let reqwest_client = Reqwest::builder()
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:73.0) Gecko/20100101 Firefox/73.0")
+        .build()?;
+
     let framework = StandardFramework::new()
         .configure(|c| {
             c.owners(owners)
@@ -160,6 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data.insert::<BotId>(bot_id);
         data.insert::<SpotifyClient>(Arc::new(spotify));
         data.insert::<PrefixMap>(Arc::new(prefixes));
+        data.insert::<ReqwestClient>(reqwest_client);
     }
 
     // Here we clone a lock to the Shard Manager, and then move it into a new
