@@ -40,7 +40,8 @@ RUN apt-get update && \
     aria2 \
     openssl \
     libssl-dev \
-    pkg-config
+    pkg-config \
+    ffmpeg
 
 ENV APP_USER=appuser
 

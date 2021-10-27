@@ -3,6 +3,7 @@ mod music;
 mod fun;
 mod setup;
 mod voice;
+mod tracker;
 
 use serenity::{
     framework::{
@@ -16,6 +17,7 @@ use music::*;
 use fun::*;
 use setup::*;
 use voice::*;
+use tracker::*;
 
 #[group]
 #[description = "Music commands"]
@@ -36,3 +38,9 @@ pub(crate) struct Config;
 #[description = "Commands used for voice chat"]
 #[commands(summon, disconnect)]
 pub struct Voice;
+
+#[group("Tracker")]
+#[description = "Package tracker on 'Correios'"]
+#[commands(pkg_add, pkg_list, pkg_rm)]
+#[only_in(dm)]
+pub struct Tracker;

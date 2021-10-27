@@ -134,7 +134,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             }
         }
         for track in query_info.tracks.iter() {
-            if let Err(e) = LavalinkClient::play(&lava_client, guild_id, track.clone())
+            if let Err(_e) = LavalinkClient::play(&lava_client, guild_id, track.clone())
                 .queue()
                 .await
             {

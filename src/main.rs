@@ -36,6 +36,9 @@ use serenity::{
     prelude::*,
 };
 use reqwest::Client as Reqwest;
+use sea_orm::{
+    Database
+};
 
 use lavalink_rs::{
     LavalinkClient
@@ -120,6 +123,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let spotify = Spotify::new(client_credentials);
 
     let pool = database_helper::obtain_db_pool(db_url).await?;
+    let sea_db = Database::connect(db_url)
+        .await
+        .unwrap();
     let prefixes = database_helper::fetch_prefixes(&pool).await?;
 
     let reqwest_client = Reqwest::builder()
@@ -138,7 +144,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .after(after)        
         .group(&FUN_GROUP)
         .group(&VOICE_GROUP)
-        .group(&MUSIC_GROUP);
+        .group(&MUSIC_GROUP)
+        .group(&TRACKER_GROUP);
 
     let lava_client = LavalinkClient::builder(bot_id)
         .set_host(lavalink_url)
@@ -159,6 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut data = client.data.write().await;
         
         data.insert::<Lavalink>(lava_client);
+        data.insert::<SeaDBConnection>(sea_db);
         data.insert::<ConnectionPool>(pool);
         data.insert::<SettingsConf>(settings);
         data.insert::<VoiceTimerMap>(Arc::new(voice_timer_map));

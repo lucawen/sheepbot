@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use serenity::{model::id::GuildId};
 use crate::models::{
-    BotInfo
+    core::BotInfo
 };
 use sqlx::{Pool, Postgres};
 

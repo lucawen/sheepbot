@@ -19,6 +19,9 @@ use songbird::{
         Input,
     },
 };
+use sea_orm::{
+    DatabaseConnection
+};
 
 pub struct Lavalink;
 
@@ -42,6 +45,12 @@ pub struct ConnectionPool;
 
 impl TypeMapKey for ConnectionPool {
     type Value = PgPool;
+}
+
+pub struct SeaDBConnection;
+
+impl TypeMapKey for SeaDBConnection {
+    type Value = DatabaseConnection;
 }
 
 pub struct BotId;

@@ -9,7 +9,7 @@ use serenity::{
 use std::time::{Duration};
 use tokio::time::sleep;
 use crate::models::{
-    BotInfo
+    core::BotInfo
 };
 
 pub async fn guild_pruner(ctx: &Context) -> CommandResult {

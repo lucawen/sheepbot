@@ -1,10 +1,7 @@
 use tokio::{
-    fs::File,
-    io::copy,
     time::{sleep, Duration}
 };
 use std::{
-    io::Cursor,
     path::Path,
     fs::{remove_file},
     sync::{Arc, Weak, mpsc}
@@ -38,7 +35,7 @@ use qrcode::QrCode;
 use image::Luma;
 use crate::{
     utils::message::{check_msg},
-    structures::cmd_data::{ReqwestClient, Lavalink},
+    structures::cmd_data::{Lavalink},
 };
 use songbird::{
     Event,

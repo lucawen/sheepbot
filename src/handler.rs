@@ -99,7 +99,7 @@ impl EventHandler for Handler {
                 panic!("Error when pruning guilds! {}", e);
             }
 
-            let pool = ctx
+            let _pool = ctx
                 .data
                 .read()
                 .await
@@ -141,14 +141,16 @@ pub async fn dynamic_prefix(ctx: &Context, msg: &Message) -> Option<String> {
         (prefixes, default_prefix.to_string())
     };
 
-    let guild_id = msg.guild_id.unwrap();
+    if let Some(guild_id) = msg.guild_id {
+        let wrapped_prefix = prefixes.get(&guild_id);
 
-    let wrapped_prefix = prefixes.get(&guild_id);
-
-    match wrapped_prefix {
-        Some(prefix_guard) => Some(prefix_guard.value().to_owned()),
-        None => Some(default_prefix),
+        return match wrapped_prefix {
+            Some(prefix_guard) => Some(prefix_guard.value().to_owned()),
+            None => Some(default_prefix),
+        }
     }
+
+    Some(default_prefix)
 }
 
 // After a command is executed, goto here

@@ -25,6 +25,12 @@ aspotify = "0.7.0"
 tts-urls = "1.0.0"
 reqwest = "0.11.4"
 notify = "4.0.17"
+uuid = "0.8.2"
+chrono = "0.4.19"
+
+[dependencies.sea-orm]
+version = "0.3.1"
+features = ["chrono", "uuid", "sqlx-all", "runtime-tokio-rustls"]
 
 [dependencies.serenity]
 version = "0.10.9"
